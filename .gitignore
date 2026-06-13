@@ -1,0 +1,5 @@
+.env
+rag_env/
+Token&Paths/
+Crawler/dataObtained/
+RAG_Data/
