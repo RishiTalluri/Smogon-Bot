@@ -147,7 +147,7 @@ def parse_query(query: str, history: list[dict] | None = None) -> dict:
     ql = query.lower().strip()
 
     tier_m = TIER_PATTERN.search(ql)
-    tier   = tier_m.group(1).upper() if tier_m else None
+    tier   = tier_m.group(1).upper() if tier_m else "OU"
 
     gen_m  = GEN_PATTERN.search(ql)
     gen    = gen_m.group(1).upper() if gen_m else "SV"
