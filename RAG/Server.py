@@ -1,31 +1,28 @@
 """
 Smogon RAG Bot — Flask Backend
-Wraps Bot.py RAG logic, exposes REST API for the frontend.
-Run: python server.py
+Wraps rag_engine (hybrid vector + graph retrieval) behind the same REST API
+as before. API contract is unchanged — every response still only ever
+contains {answer, chunks_used, corrected_mon} (or {error}); nothing about
+which chunks were retrieved, their scores, or which retriever found them is
+ever sent to a client. That detail is printed to this process's own terminal
+only, via rag_engine.debug_logger (see config.SHOW_RETRIEVAL_DEBUG).
+Run: python Server.py
 """
 
 import uuid
 import time
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# ── Import RAG core (Bot.py must be in same directory) ───────────────────────
-from Bot import (
-    load_index_and_chunks, load_embedder,
-    retrieve, ask_groq, parse_query,
-    GROQ_API_KEY, GROQ_MODEL,
-)
-from groq import Groq
+from rag_engine.engine import RagEngine
 
 app = Flask(__name__)
 CORS(app)  # allow frontend dev server on any port
 
 # ── Boot RAG (once at startup) ────────────────────────────────────────────────
 print("[*] Booting RAG engine…")
-index, chunks = load_index_and_chunks()
-embedder      = load_embedder()
-groq_client   = Groq(api_key=GROQ_API_KEY)
-print("[✓] RAG engine ready\n")
+engine = RagEngine.load()
 
 # ── In-memory chat store ──────────────────────────────────────────────────────
 # { chat_id: { "title": str, "history": [...], "created_at": float } }
@@ -101,6 +98,10 @@ def send_message(chat_id):
     Send a user message to a chat.
     Body: { "message": "..." }
     Returns: { "answer": "...", "chunks_used": N, "corrected_mon": "..." | null }
+
+    Retrieval internals (which chunks, vector/graph/keyword scores, which
+    retriever found each one) are printed to this server's terminal by
+    rag_engine.debug_logger — they are never part of this response.
     """
     if chat_id not in chats:
         return jsonify({"error": "Chat not found"}), 404
@@ -113,13 +114,11 @@ def send_message(chat_id):
     chat = chats[chat_id]
     history = chat["history"]
 
-    # Auto-title the chat from its first message
     if not history:
         chat["title"] = question[:48] + ("…" if len(question) > 48 else "")
 
-    # RAG retrieve + generate
     try:
-        relevant_chunks = retrieve(question, index, chunks, embedder, history)
+        relevant_chunks = engine.retrieve(question, history)
 
         if not relevant_chunks:
             answer = (
@@ -129,11 +128,10 @@ def send_message(chat_id):
             )
             chunks_used = 0
         else:
-            answer = ask_groq(groq_client, question, relevant_chunks, history)
+            answer = engine.answer(question, relevant_chunks, history)
             chunks_used = len(relevant_chunks)
 
-        # Persist turn
-        parsed = parse_query(question, history)
+        parsed = engine.parse(question, history)
         history.append({"user": question, "bot": answer, "parsed": parsed})
 
         return jsonify({
@@ -158,7 +156,8 @@ def clear_chat(chat_id):
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": GROQ_MODEL})
+    from rag_engine import config
+    return jsonify({"status": "ok", "model": config.GROQ_MODEL})
 
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
