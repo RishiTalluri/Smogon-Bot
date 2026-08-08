@@ -5,5 +5,8 @@ flask==3.0.0
 flask-cors==4.0.0
 requests==2.31.0
 beautifulsoup4==4.12.2
-numpy==1.24.3
-lxml==4.9.3
+numpy==1.26.4
+lxml==5.2.2
+pandas==2.2.2
+networkx==3.3
+tqdm==4.66.4
