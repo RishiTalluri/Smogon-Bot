@@ -90,22 +90,44 @@ def build_graph(chunk_store, show_progress: bool = True) -> nx.Graph:
 
 
 def save_graph(g: nx.Graph, path: str | None = None) -> None:
-    path = path or config.GRAPH_PATH
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    data = nx.node_link_data(g, edges="edges")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    from .database import get_session
+    from .models import GraphEdge
+
+    with get_session() as session:
+        session.query(GraphEdge).delete()
+        for u, v, d in g.edges(data=True):
+            session.add(GraphEdge(
+                source_node=u,
+                target_node=v,
+                kind=d.get("kind", ""),
+                weight=d.get("weight", 1.0)
+            ))
 
 
 def load_graph(path: str | None = None) -> nx.Graph:
-    path = path or config.GRAPH_PATH
-    if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"Graph not found at {path}. Run scripts/build_index.py first."
-        )
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return nx.node_link_graph(data, edges="edges")
+    from .database import get_session
+    from .models import GraphEdge
+
+    g = nx.Graph()
+    with get_session() as session:
+        edges = session.query(GraphEdge).all()
+        for e in edges:
+            if e.source_node.startswith("chunk:"):
+                g.add_node(e.source_node, type="chunk")
+            elif e.source_node.startswith("mon:"):
+                g.add_node(e.source_node, type="mon", label=e.source_node[4:])
+            elif e.source_node.startswith("tier:"):
+                g.add_node(e.source_node, type="tier", label=e.source_node[5:])
+
+            if e.target_node.startswith("chunk:"):
+                g.add_node(e.target_node, type="chunk")
+            elif e.target_node.startswith("mon:"):
+                g.add_node(e.target_node, type="mon", label=e.target_node[4:])
+            elif e.target_node.startswith("tier:"):
+                g.add_node(e.target_node, type="tier", label=e.target_node[5:])
+
+            g.add_edge(e.source_node, e.target_node, kind=e.kind, weight=e.weight)
+    return g
 
 
 def graph_stats(g: nx.Graph) -> dict:

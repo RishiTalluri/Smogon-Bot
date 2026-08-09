@@ -61,9 +61,9 @@ class HybridRetriever:
     everything to a debug_logger callback for terminal-only printing.
     """
 
-    def __init__(self, index, chunk_store, embedder, graph, debug_logger=None):
+    def __init__(self, chunk_store, embedder, graph, debug_logger=None):
         self.chunk_store = chunk_store
-        self.vector = VectorRetriever(index, chunk_store, embedder)
+        self.vector = VectorRetriever(embedder)
         self.graph_retriever = GraphRetriever(graph, chunk_store)
         self.debug_logger = debug_logger
 

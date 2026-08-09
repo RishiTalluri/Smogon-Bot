@@ -1,0 +1,4 @@
+# Extra dependencies needed only for the one-time migration script.
+# Install alongside main requirements:
+#   pip install -r requirements.txt -r requirements-migrate.txt
+faiss-cpu==1.8.0

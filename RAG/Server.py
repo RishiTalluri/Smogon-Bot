@@ -1,158 +1,65 @@
 """
 Smogon RAG Bot — Flask Backend
-Wraps rag_engine (hybrid vector + graph retrieval) behind the same REST API
-as before. API contract is unchanged — every response still only ever
-contains {answer, chunks_used, corrected_mon} (or {error}); nothing about
-which chunks were retrieved, their scores, or which retriever found them is
-ever sent to a client. That detail is printed to this process's own terminal
-only, via rag_engine.debug_logger (see config.SHOW_RETRIEVAL_DEBUG).
-Run: python Server.py
+Wraps rag_engine (hybrid vector + graph retrieval) behind a REST API.
+Now using PostgreSQL for persistence and Authentication.
 """
 
-import uuid
+import os
 import time
-
-from flask import Flask, request, jsonify
+import uuid
+from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 
 from rag_engine.engine import RagEngine
+from rag_engine.database import get_session, create_tables
+from rag_engine.models import User, Chat, Message
+from rag_engine.auth import hash_password, verify_password, create_token, require_auth
 
 app = Flask(__name__)
-CORS(app)  # allow frontend dev server on any port
+# CORS: allow Vercel frontend (or any configured origins) with credentials
+allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+CORS(app, origins=allowed_origins.split(",") if "," in allowed_origins else allowed_origins,
+     supports_credentials=True)
 
-# ── Boot RAG (once at startup) ────────────────────────────────────────────────
+# ── Boot RAG & DB (once at startup) ───────────────────────────────────────────
+print("[*] Creating database tables...")
+create_tables()
+
 print("[*] Booting RAG engine…")
 engine = RagEngine.load()
 
-# ── In-memory chat store ──────────────────────────────────────────────────────
-# { chat_id: { "title": str, "history": [...], "created_at": float } }
-chats: dict[str, dict] = {}
+# ── Static Frontend Serving (only when built frontend exists, e.g. Docker) ────
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
 
-
-def new_chat_obj(title: str = "New Chat") -> dict:
-    return {"title": title, "history": [], "created_at": time.time()}
-
+if os.path.isdir(STATIC_DIR):
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_frontend(path):
+        if path and os.path.exists(os.path.join(STATIC_DIR, path)):
+            return send_from_directory(STATIC_DIR, path)
+        return send_from_directory(STATIC_DIR, 'index.html')
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def chat_summary(chat_id: str) -> dict:
-    c = chats[chat_id]
-    last_msg = ""
-    if c["history"]:
-        last_msg = c["history"][-1]["user"][:60]
-    return {
-        "id":         chat_id,
-        "title":      c["title"],
-        "last_msg":   last_msg,
-        "created_at": c["created_at"],
-        "msg_count":  len(c["history"]),
-    }
-
-
-# ── Routes ────────────────────────────────────────────────────────────────────
-
-@app.route("/api/chats", methods=["GET"])
-def list_chats():
-    """Return all chats sorted newest-first."""
-    summaries = [chat_summary(cid) for cid in chats]
-    summaries.sort(key=lambda x: x["created_at"], reverse=True)
-    return jsonify(summaries)
-
-
-@app.route("/api/chats", methods=["POST"])
-def create_chat():
-    """Create a new empty chat."""
-    chat_id = str(uuid.uuid4())
-    chats[chat_id] = new_chat_obj()
-    return jsonify({"id": chat_id, **chats[chat_id]}), 201
-
-
-@app.route("/api/chats/<chat_id>", methods=["GET"])
-def get_chat(chat_id):
-    """Return full message history for a chat."""
-    if chat_id not in chats:
-        return jsonify({"error": "Chat not found"}), 404
-    c = chats[chat_id]
-    return jsonify({
-        "id":      chat_id,
-        "title":   c["title"],
-        "history": [{"role": "user", "content": t["user"]} if i % 2 == 0
-                    else {"role": "assistant", "content": t["bot"]}
-                    for t in c["history"] for i in range(2)],
-        "raw_history": c["history"],
-    })
-
-
-@app.route("/api/chats/<chat_id>", methods=["DELETE"])
-def delete_chat(chat_id):
-    """Delete a chat."""
-    if chat_id not in chats:
-        return jsonify({"error": "Chat not found"}), 404
-    del chats[chat_id]
-    return jsonify({"deleted": chat_id})
-
-
-@app.route("/api/chats/<chat_id>/messages", methods=["POST"])
-def send_message(chat_id):
-    """
-    Send a user message to a chat.
-    Body: { "message": "..." }
-    Returns: { "answer": "...", "chunks_used": N, "corrected_mon": "..." | null }
-
-    Retrieval internals (which chunks, vector/graph/keyword scores, which
-    retriever found each one) are printed to this server's terminal by
-    rag_engine.debug_logger — they are never part of this response.
-    """
-    if chat_id not in chats:
-        return jsonify({"error": "Chat not found"}), 404
-
-    body = request.get_json(silent=True) or {}
-    question = (body.get("message") or "").strip()
-    if not question:
-        return jsonify({"error": "message is required"}), 400
-
-    chat = chats[chat_id]
-    history = chat["history"]
-
-    if not history:
-        chat["title"] = question[:48] + ("…" if len(question) > 48 else "")
-
-    try:
-        relevant_chunks = engine.retrieve(question, history)
-
-        if not relevant_chunks:
-            answer = (
-                "I couldn't find relevant data for that. "
-                "Try being more specific — e.g. *'Gholdengo SV OU moveset'* "
-                "or *'why was Iron Bundle banned SV OU'*."
-            )
-            chunks_used = 0
+def build_rag_history(messages):
+    """Convert DB messages into the format RagEngine expects."""
+    history = []
+    i = 0
+    while i < len(messages) - 1:
+        if messages[i].role == 'user' and messages[i+1].role == 'assistant':
+            parsed = {}
+            if messages[i+1].metadata_json:
+                parsed = messages[i+1].metadata_json.get('parsed', {})
+            history.append({
+                'user': messages[i].content,
+                'bot': messages[i+1].content,
+                'parsed': parsed,
+            })
+            i += 2
         else:
-            answer = engine.answer(question, relevant_chunks, history)
-            chunks_used = len(relevant_chunks)
+            i += 1
+    return history
 
-        parsed = engine.parse(question, history)
-        history.append({"user": question, "bot": answer, "parsed": parsed})
-
-        return jsonify({
-            "answer":        answer,
-            "chunks_used":   chunks_used,
-            "corrected_mon": parsed.get("mon") or None,
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/chats/<chat_id>/clear", methods=["POST"])
-def clear_chat(chat_id):
-    """Clear history but keep the chat."""
-    if chat_id not in chats:
-        return jsonify({"error": "Chat not found"}), 404
-    chats[chat_id]["history"] = []
-    chats[chat_id]["title"]   = "New Chat"
-    return jsonify({"cleared": chat_id})
-
+# ── Public Routes ─────────────────────────────────────────────────────────────
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -160,6 +67,230 @@ def health():
     return jsonify({"status": "ok", "model": config.GROQ_MODEL})
 
 
-# ── Entry ─────────────────────────────────────────────────────────────────────
+@app.route("/api/auth/register", methods=["POST"])
+def register():
+    body = request.get_json(silent=True) or {}
+    username = body.get("username", "").strip()
+    email = body.get("email", "").strip()
+    password = body.get("password", "")
+
+    if len(username) < 3:
+        return jsonify({"error": "username must be at least 3 characters"}), 400
+    if "@" not in email:
+        return jsonify({"error": "invalid email"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+
+    with get_session() as session:
+        # Check uniqueness
+        existing_user = session.query(User).filter((User.username == username) | (User.email == email)).first()
+        if existing_user:
+            return jsonify({"error": "username or email already exists"}), 409
+        
+        user = User(
+            id=str(uuid.uuid4()),
+            username=username,
+            email=email,
+            password_hash=hash_password(password)
+        )
+        session.add(user)
+        session.commit()
+        
+        token = create_token(user.id)
+        return jsonify({
+            "token": token,
+            "user": {"id": user.id, "username": user.username, "email": user.email}
+        }), 201
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+    body = request.get_json(silent=True) or {}
+    email = body.get("email", "").strip()
+    password = body.get("password", "")
+
+    with get_session() as session:
+        user = session.query(User).filter(User.email == email).first()
+        if not user or not verify_password(password, user.password_hash):
+            return jsonify({"error": "Invalid email or password"}), 401
+
+        token = create_token(user.id)
+        return jsonify({
+            "token": token,
+            "user": {"id": user.id, "username": user.username, "email": user.email}
+        })
+
+
+@app.route("/api/auth/me", methods=["GET"])
+@require_auth
+def get_me():
+    with get_session() as session:
+        user = session.query(User).filter(User.id == g.current_user_id).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        return jsonify({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        })
+
+
+# ── Chat Routes ───────────────────────────────────────────────────────────────
+
+@app.route("/api/chats", methods=["GET"])
+@require_auth
+def list_chats():
+    """Return all chats sorted newest-first."""
+    with get_session() as session:
+        chats = session.query(Chat).filter(Chat.user_id == g.current_user_id).order_by(Chat.created_at.desc()).all()
+        summaries = []
+        for chat in chats:
+            summaries.append({
+                "id": chat.id,
+                "title": chat.title,
+                "created_at": chat.created_at.timestamp() if chat.created_at else time.time(),
+                "msg_count": len(chat.messages)
+            })
+        return jsonify(summaries)
+
+
+@app.route("/api/chats", methods=["POST"])
+@require_auth
+def create_chat():
+    """Create a new empty chat."""
+    with get_session() as session:
+        chat = Chat(
+            id=str(uuid.uuid4()),
+            user_id=g.current_user_id,
+            title="New Chat"
+        )
+        session.add(chat)
+        session.commit()
+        return jsonify({
+            "id": chat.id,
+            "title": chat.title,
+            "created_at": chat.created_at.timestamp() if chat.created_at else time.time(),
+            "msg_count": 0
+        }), 201
+
+
+@app.route("/api/chats/<chat_id>", methods=["GET"])
+@require_auth
+def get_chat(chat_id):
+    """Return full message history for a chat."""
+    with get_session() as session:
+        chat = session.query(Chat).filter(Chat.id == chat_id, Chat.user_id == g.current_user_id).first()
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
+        
+        history = [{"role": msg.role, "content": msg.content} for msg in chat.messages]
+        
+        return jsonify({
+            "id": chat.id,
+            "title": chat.title,
+            "history": history,
+            "raw_history": build_rag_history(chat.messages),
+        })
+
+
+@app.route("/api/chats/<chat_id>", methods=["DELETE"])
+@require_auth
+def delete_chat(chat_id):
+    """Delete a chat."""
+    with get_session() as session:
+        chat = session.query(Chat).filter(Chat.id == chat_id, Chat.user_id == g.current_user_id).first()
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
+        
+        session.delete(chat)
+        session.commit()
+        return jsonify({"deleted": chat_id})
+
+
+@app.route("/api/chats/<chat_id>/messages", methods=["POST"])
+@require_auth
+def send_message(chat_id):
+    """
+    Send a user message to a chat.
+    Body: { "message": "..." }
+    """
+    body = request.get_json(silent=True) or {}
+    question = (body.get("message") or "").strip()
+    if not question:
+        return jsonify({"error": "message is required"}), 400
+
+    with get_session() as session:
+        chat = session.query(Chat).filter(Chat.id == chat_id, Chat.user_id == g.current_user_id).first()
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
+
+        messages = chat.messages
+        history = build_rag_history(messages)
+
+        if not messages:
+            chat.title = question[:48] + ("…" if len(question) > 48 else "")
+            session.add(chat)
+
+        try:
+            relevant_chunks = engine.retrieve(question, history)
+
+            if not relevant_chunks:
+                answer = (
+                    "I couldn't find relevant data for that. "
+                    "Try being more specific — e.g. *'Gholdengo SV OU moveset'* "
+                    "or *'why was Iron Bundle banned SV OU'*."
+                )
+                chunks_used = 0
+            else:
+                answer = engine.answer(question, relevant_chunks, history)
+                chunks_used = len(relevant_chunks)
+
+            parsed = engine.parse(question, history)
+
+            # Store User Message
+            user_msg = Message(
+                chat_id=chat.id,
+                role="user",
+                content=question,
+                metadata_json=None
+            )
+            session.add(user_msg)
+            
+            # Store Bot Message
+            bot_msg = Message(
+                chat_id=chat.id,
+                role="assistant",
+                content=answer,
+                metadata_json={"parsed": parsed, "chunks_used": chunks_used}
+            )
+            session.add(bot_msg)
+
+            session.commit()
+
+            return jsonify({
+                "answer": answer,
+                "chunks_used": chunks_used,
+                "corrected_mon": parsed.get("mon") or None,
+            })
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chats/<chat_id>/clear", methods=["POST"])
+@require_auth
+def clear_chat(chat_id):
+    """Clear history but keep the chat."""
+    with get_session() as session:
+        chat = session.query(Chat).filter(Chat.id == chat_id, Chat.user_id == g.current_user_id).first()
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
+        
+        session.query(Message).filter(Message.chat_id == chat.id).delete()
+        chat.title = "New Chat"
+        session.commit()
+        
+        return jsonify({"cleared": chat_id})
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

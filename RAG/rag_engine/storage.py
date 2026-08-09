@@ -23,13 +23,11 @@ serialization and remains the right tool for the vector index itself.
 import json
 import os
 
-import faiss
-
 from . import config
 
 
 class ChunkStore:
-    """In-memory chunk store backed by chunks.jsonl on disk."""
+    """In-memory chunk store, loaded from PostgreSQL at boot."""
 
     def __init__(self, chunks: list[dict]):
         self._chunks = chunks
@@ -45,8 +43,6 @@ class ChunkStore:
         return self._by_id.get(chunk_id)
 
     def by_index(self, idx: int) -> dict | None:
-        """Lookup by FAISS row position (0..N-1), which equals chunk['id'] as
-        long as the store was built in order — asserted at load time."""
         if 0 <= idx < len(self._chunks):
             return self._chunks[idx]
         return None
@@ -56,12 +52,43 @@ class ChunkStore:
         return self._chunks
 
 
-def load_chunks(path: str | None = None) -> ChunkStore:
+def load_chunks_from_db() -> ChunkStore:
+    """Load all chunks from PostgreSQL into memory."""
+    from .database import get_session
+    from .models import Chunk
+
+    with get_session() as session:
+        rows = session.query(Chunk).order_by(Chunk.id).all()
+        chunks = []
+        for row in rows:
+            chunks.append({
+                "id": row.id,
+                "text": row.text,
+                "content": row.content,
+                "title": row.title,
+                "forum": row.forum,
+                "url": row.url,
+                "is_team": row.is_team,
+                "source": row.source,
+                "mons": row.mons or [],
+                "tiers": row.tiers or [],
+                "gen_tag": row.gen_tag,
+            })
+    if not chunks:
+        raise RuntimeError(
+            "No chunks found in the database. Run scripts/migrate_to_postgres.py first."
+        )
+    return ChunkStore(chunks)
+
+
+# ── Legacy file-based loaders (used by migration scripts only) ────────────────
+
+def load_chunks_from_file(path: str | None = None) -> ChunkStore:
+    """Legacy: load chunks from a JSONL file. Used by migration scripts."""
     path = path or config.CHUNKS_PATH
     if not os.path.exists(path):
         raise FileNotFoundError(
-            f"Chunk store not found at {path}. Run scripts/build_index.py first "
-            f"(or scripts/migrate_pkl_to_jsonl.py if you have an existing docs.pkl)."
+            f"Chunk store not found at {path}. Run scripts/build_index.py first."
         )
     chunks = []
     with open(path, "r", encoding="utf-8") as f:
@@ -73,19 +100,17 @@ def load_chunks(path: str | None = None) -> ChunkStore:
                 chunks.append(json.loads(line))
             except json.JSONDecodeError as e:
                 print(f"[WARN] Skipping malformed line {line_no} in {path}: {e}")
-    # FAISS row i must correspond to chunks[i] — build_index.py guarantees this
-    # by writing chunks in the same order they were embedded.
     for i, c in enumerate(chunks):
         if c["id"] != i:
             raise ValueError(
-                f"chunks.jsonl is out of order or has gaps at line {i} "
-                f"(id={c['id']}). FAISS row lookups require id == row index. "
+                f"chunks.jsonl out of order at line {i} (id={c['id']}). "
                 f"Rebuild with scripts/build_index.py."
             )
     return ChunkStore(chunks)
 
 
 def save_chunks(records: list[dict], path: str | None = None) -> None:
+    """Legacy: save chunks to a JSONL file."""
     path = path or config.CHUNKS_PATH
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -94,7 +119,9 @@ def save_chunks(records: list[dict], path: str | None = None) -> None:
 
 
 def load_faiss_index(path: str | None = None):
+    """Legacy: load FAISS index from file. Used by migration scripts."""
+    import faiss
     path = path or config.FAISS_INDEX_PATH
     if not os.path.exists(path):
-        raise FileNotFoundError(f"FAISS index not found at {path}. Run scripts/build_index.py first.")
+        raise FileNotFoundError(f"FAISS index not found at {path}.")
     return faiss.read_index(path)

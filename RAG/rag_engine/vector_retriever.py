@@ -8,42 +8,51 @@ request — id-based dedup is both simpler and cheaper since ids are stable).
 """
 
 import numpy as np
+from sqlalchemy import text
 
+from .database import get_session
 from . import config
 
 
 class VectorRetriever:
-    def __init__(self, index, chunk_store, embedder):
-        self.index = index
-        self.chunk_store = chunk_store
+    def __init__(self, embedder):
         self.embedder = embedder
 
-    def search(self, variants: list[str], top_k: int) -> dict[int, float]:
-        """
-        Returns {chunk_id: best_l2_distance} for every chunk retrieved by any
-        variant, keeping the smallest (best) distance seen across variants.
-        """
-        vecs = self.embedder.encode(variants, convert_to_numpy=True, batch_size=16).astype("float32")
+    def search(self, query_variants: list[str], top_k: int = config.TOP_K) -> dict[int, float]:
+        """Embed each query variant and search pgvector. Returns {chunk_id: L2_distance}."""
+        all_distances: dict[int, float] = {}
 
-        best_distance: dict[int, float] = {}
-        for vec in vecs:
-            distances, indices = self.index.search(vec[np.newaxis, :], top_k)
-            for dist, idx in zip(distances[0], indices[0]):
-                chunk = self.chunk_store.by_index(int(idx))
-                if chunk is None:
-                    continue
-                cid = chunk["id"]
-                dist = float(dist)
-                if cid not in best_distance or dist < best_distance[cid]:
-                    best_distance[cid] = dist
-        return best_distance
+        embeddings = self.embedder.encode(query_variants)
+
+        with get_session() as session:
+            for emb in embeddings:
+                vec_str = "[" + ",".join(str(float(x)) for x in emb) + "]"
+                sql = text(
+                    "SELECT id, embedding <-> :vec AS distance "
+                    "FROM chunks "
+                    "WHERE embedding IS NOT NULL "
+                    "ORDER BY distance "
+                    "LIMIT :k"
+                )
+                rows = session.execute(sql, {"vec": vec_str, "k": top_k}).fetchall()
+                for row in rows:
+                    cid, dist = row[0], float(row[1])
+                    if cid not in all_distances or dist < all_distances[cid]:
+                        all_distances[cid] = dist
+
+        return all_distances
 
     @staticmethod
     def normalize(distances: dict[int, float]) -> dict[int, float]:
-        """Min-max normalise L2 distances to a 0..1 similarity score (1 = best)."""
+        """Convert L2 distances to 0..1 similarity scores (higher = better)."""
         if not distances:
             return {}
-        vals = list(distances.values())
-        lo, hi = min(vals), max(vals)
-        span = (hi - lo) or 1.0
-        return {cid: 1.0 - (d - lo) / span for cid, d in distances.items()}
+        max_dist = max(distances.values())
+        min_dist = min(distances.values())
+        spread = max_dist - min_dist
+        if spread < 1e-9:
+            return {cid: 1.0 for cid in distances}
+        return {
+            cid: 1.0 - (dist - min_dist) / spread
+            for cid, dist in distances.items()
+        }

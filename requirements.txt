@@ -1,12 +1,21 @@
-faiss-cpu==1.8.0
+# Core runtime
 sentence-transformers==3.0.1
 groq==0.9.0
 flask==3.0.0
 flask-cors==4.0.0
-requests==2.31.0
-beautifulsoup4==4.12.2
 numpy==1.26.4
-lxml==5.2.2
-pandas==2.2.2
 networkx==3.3
 tqdm==4.66.4
+
+# PostgreSQL + pgvector
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.35
+pgvector==0.3.6
+
+# Auth + config
+python-dotenv==1.0.1
+PyJWT==2.9.0
+bcrypt==4.2.0
+
+# Production server
+gunicorn==22.0.0

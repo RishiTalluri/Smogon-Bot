@@ -8,6 +8,9 @@ without importing from each other.
 """
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─── PATHS ─────────────────────────────────────────────────────────────────────
 # Resolved relative to this file so it works regardless of the current working
@@ -29,6 +32,10 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://smogon:smogon@localhost:5432/smogon_rag')
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'dev-secret-change-me')
+JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '24'))
 
 # ─── RETRIEVAL TUNABLES ─────────────────────────────────────────────────────────
 TOP_K              = 50      # FAISS candidates per query variant

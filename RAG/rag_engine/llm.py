@@ -27,13 +27,14 @@ def build_messages(question: str, context_chunks: list[str], history: list[dict]
 
 RULES:
 1. PRIMARY SOURCE: Use the provided Smogon forum context as your main source.
-2. GENERAL KNOWLEDGE FALLBACK: For well-established, stable competitive facts — tier definitions (what OU/UU/RU means), how Smogon tiering works, base stat facts, type matchups — you MAY use your training knowledge if the context does not cover it. Clearly say "(general knowledge)" when doing so.
+2. GENERAL KNOWLEDGE FALLBACK: You may use your general knowledge of competitive Pokémon. Only mention that you are using general knowledge if the answer is entirely based on general knowledge with NO context support. Use it naturally.
 3. NEVER invent or guess: specific movesets, EV spreads, ban outcomes, suspect test results, or viability rankings not present in the context. These change frequently.
 4. Do NOT mix NatDex data with standard SV tiers unless the user explicitly asks about NatDex.
 5. If context partially answers, give what you have and clearly note what is missing.
-6. Only say "I couldn't find clear data" if you have NOTHING useful from context OR general knowledge.
+6. Only say "I couldn't find clear data" as an absolute last resort. If there's any relevant context at all, use it and supplement with knowledge.
 7. You MAY synthesise and summarise across multiple context chunks.
-8. Format responses clearly. Use bullet points for movesets/sets. Keep answers concise."""
+8. Format responses clearly. Use bullet points for movesets/sets. Keep answers concise.
+9. Present your answer confidently. Don't apologize or hedge unnecessarily. If you know something from competitive knowledge, share it directly."""
 
     context = "\n\n---\n\n".join(context_chunks)
 

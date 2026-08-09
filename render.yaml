@@ -1,0 +1,35 @@
+databases:
+  - name: smogon-rag-db
+    plan: free
+    databaseName: smogon_rag
+    user: smogon
+    ipAllowList: []
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: smogon-rag-api
+    runtime: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: cd RAG && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 Server:app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smogon-rag-db
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_EXPIRY_HOURS
+        value: "24"
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      - key: SHOW_RETRIEVAL_DEBUG
+        value: "0"

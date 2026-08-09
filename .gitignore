@@ -1,5 +1,36 @@
+# ── Secrets & Environment ──
 .env
-rag_env/
+.env.local
+.env.production.local
 Token&Paths/
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+rag_env/
+venv/
+.venv/
+*.egg-info/
+
+# ── Data files (too large for git — stored in PostgreSQL in production) ──
+RAG/RAG_Data/
 Crawler/dataObtained/
-Rag/RAG_Data/
+
+# ── Frontend ──
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+

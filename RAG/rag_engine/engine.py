@@ -25,19 +25,18 @@ class RagEngine:
 
     @classmethod
     def load(cls) -> "RagEngine":
-        # Imported here, not at module level: importing rag_engine for utility
-        # code (storage, entities, graph tools) shouldn't force-load torch/groq.
         from groq import Groq
         from sentence_transformers import SentenceTransformer
+        from .database import create_tables
 
-        print("[*] Loading FAISS index...")
-        index = storage.load_faiss_index()
+        print("[*] Creating database tables if needed...")
+        create_tables()
 
-        print("[*] Loading chunk store...")
-        chunk_store = storage.load_chunks()
+        print("[*] Loading chunk store from DB...")
+        chunk_store = storage.load_chunks_from_db()
         print(f"[✓] Loaded {len(chunk_store)} chunks")
 
-        print("[*] Loading entity graph...")
+        print("[*] Loading entity graph from DB...")
         graph = load_graph()
         print(f"[✓] Graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
 
@@ -52,7 +51,6 @@ class RagEngine:
         groq_client = Groq(api_key=api_key)
 
         retriever = HybridRetriever(
-            index=index,
             chunk_store=chunk_store,
             embedder=embedder,
             graph=graph,
