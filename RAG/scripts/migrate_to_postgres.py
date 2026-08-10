@@ -163,7 +163,7 @@ def main():
     create_pgvector_index()
 
     elapsed = time.time() - start
-    print(f"\n✅ Migration complete in {elapsed:.0f}s")
+    print(f"\n Migration complete in {elapsed:.0f}s")
 
 
 if __name__ == '__main__':

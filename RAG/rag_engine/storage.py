@@ -75,8 +75,9 @@ def load_chunks_from_db() -> ChunkStore:
                 "gen_tag": row.gen_tag,
             })
     if not chunks:
-        raise RuntimeError(
-            "No chunks found in the database. Run scripts/migrate_to_postgres.py first."
+        print(
+            "[WARN] No chunks found in the database. "
+            "Run scripts/migrate_to_postgres.py to load data."
         )
     return ChunkStore(chunks)
 
