@@ -21,12 +21,21 @@ allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
 CORS(app, origins=allowed_origins.split(",") if "," in allowed_origins else allowed_origins,
      supports_credentials=True)
 
-# ── Boot RAG & DB (once at startup) ───────────────────────────────────────────
+# ── Boot DB (once at startup) ──────────────────────────────────────────────────
 print("[*] Creating database tables...")
 create_tables()
 
-print("[*] Booting RAG engine…")
-engine = RagEngine.load()
+# ── Lazy-load RAG engine (on first request, not at import time) ────────────────
+# This lets gunicorn bind the port instantly so Render's health check passes,
+# while the heavy ML model loads on the first actual query.
+_engine = None
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        print("[*] Booting RAG engine (first request)…")
+        _engine = RagEngine.load()
+    return _engine
 
 # ── Static Frontend Serving (only when built frontend exists, e.g. Docker) ────
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
@@ -232,7 +241,7 @@ def send_message(chat_id):
             session.add(chat)
 
         try:
-            relevant_chunks = engine.retrieve(question, history)
+            relevant_chunks = get_engine().retrieve(question, history)
 
             if not relevant_chunks:
                 answer = (
@@ -242,10 +251,10 @@ def send_message(chat_id):
                 )
                 chunks_used = 0
             else:
-                answer = engine.answer(question, relevant_chunks, history)
+                answer = get_engine().answer(question, relevant_chunks, history)
                 chunks_used = len(relevant_chunks)
 
-            parsed = engine.parse(question, history)
+            parsed = get_engine().parse(question, history)
 
             # Store User Message
             user_msg = Message(
