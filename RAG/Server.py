@@ -69,6 +69,13 @@ def build_rag_history(messages):
 
 # ── Public Routes ─────────────────────────────────────────────────────────────
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     from rag_engine import config
@@ -102,13 +109,12 @@ def register():
             password_hash=hash_password(password)
         )
         session.add(user)
-        session.commit()
-        
-        token = create_token(user.id)
-        return jsonify({
-            "token": token,
-            "user": {"id": user.id, "username": user.username, "email": user.email}
-        }), 201
+
+    token = create_token(user.id)
+    return jsonify({
+        "token": token,
+        "user": {"id": user.id, "username": user.username, "email": user.email}
+    }), 201
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -173,7 +179,6 @@ def create_chat():
             title="New Chat"
         )
         session.add(chat)
-        session.commit()
         return jsonify({
             "id": chat.id,
             "title": chat.title,
@@ -211,7 +216,6 @@ def delete_chat(chat_id):
             return jsonify({"error": "Chat not found"}), 404
         
         session.delete(chat)
-        session.commit()
         return jsonify({"deleted": chat_id})
 
 
@@ -273,8 +277,6 @@ def send_message(chat_id):
             )
             session.add(bot_msg)
 
-            session.commit()
-
             return jsonify({
                 "answer": answer,
                 "chunks_used": chunks_used,
@@ -296,7 +298,6 @@ def clear_chat(chat_id):
         
         session.query(Message).filter(Message.chat_id == chat.id).delete()
         chat.title = "New Chat"
-        session.commit()
         
         return jsonify({"cleared": chat_id})
 
