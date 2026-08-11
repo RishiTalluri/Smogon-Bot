@@ -16,10 +16,9 @@ from rag_engine.models import User, Chat, Message
 from rag_engine.auth import hash_password, verify_password, create_token, require_auth
 
 app = Flask(__name__)
-# CORS: allow Vercel frontend (or any configured origins) with credentials
+# CORS: allow Vercel frontend (or any configured origins)
 allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-CORS(app, origins=allowed_origins.split(",") if "," in allowed_origins else allowed_origins,
-     supports_credentials=True)
+CORS(app, origins=[o.strip() for o in allowed_origins.split(",")] if allowed_origins != "*" else "*")
 
 # ── Boot DB (once at startup) ──────────────────────────────────────────────────
 print("[*] Creating database tables...")
