@@ -22,7 +22,10 @@ class VectorRetriever:
         """Embed each query variant and search pgvector. Returns {chunk_id: L2_distance}."""
         all_distances: dict[int, float] = {}
 
-        embeddings = self.embedder.encode(query_variants)
+        if hasattr(self.embedder, "embed"):
+            embeddings = list(self.embedder.embed(query_variants))
+        else:
+            embeddings = self.embedder.encode(query_variants)
 
         with get_session() as session:
             for emb in embeddings:

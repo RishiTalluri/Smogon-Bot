@@ -41,8 +41,14 @@ class RagEngine:
         print(f"[✓] Graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
 
         print(f"[*] Loading embedding model: {config.EMBED_MODEL} ...")
-        embedder = SentenceTransformer(config.EMBED_MODEL)
-        print("[✓] Embedding model ready")
+        try:
+            from fastembed import TextEmbedding
+            embedder = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            print("[✓] FastEmbed (ONNX) embedding model ready")
+        except ImportError:
+            from sentence_transformers import SentenceTransformer
+            embedder = SentenceTransformer(config.EMBED_MODEL)
+            print("[✓] SentenceTransformer embedding model ready")
 
         api_key = config.GROQ_API_KEY
         if not api_key:
