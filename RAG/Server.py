@@ -109,11 +109,12 @@ def register():
             password_hash=hash_password(password)
         )
         session.add(user)
+        user_id, u_name, u_email = user.id, user.username, user.email
 
-    token = create_token(user.id)
+    token = create_token(user_id)
     return jsonify({
         "token": token,
-        "user": {"id": user.id, "username": user.username, "email": user.email}
+        "user": {"id": user_id, "username": u_name, "email": u_email}
     }), 201
 
 

@@ -2,3 +2,5 @@
 # Install alongside main requirements:
 #   pip install -r requirements.txt -r requirements-migrate.txt
 faiss-cpu==1.8.0
+numpy==1.26.4
+

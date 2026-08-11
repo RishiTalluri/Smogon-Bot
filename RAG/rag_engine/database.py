@@ -34,7 +34,7 @@ def get_engine():
 def get_session_factory():
     global _SessionLocal
     if _SessionLocal is None:
-        _SessionLocal = sessionmaker(bind=get_engine())
+        _SessionLocal = sessionmaker(bind=get_engine(), expire_on_commit=False)
     return _SessionLocal
 
 
