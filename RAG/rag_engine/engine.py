@@ -26,7 +26,6 @@ class RagEngine:
     @classmethod
     def load(cls) -> "RagEngine":
         from groq import Groq
-        from sentence_transformers import SentenceTransformer
         from .database import create_tables
 
         print("[*] Creating database tables if needed...")
