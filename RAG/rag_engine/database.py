@@ -66,6 +66,6 @@ def create_tables():
                 print(f"[WARN] Could not create pgvector extension: {e}")
         from . import models  # noqa: F401 — registers models with Base
         Base.metadata.create_all(engine)
-        print("[✓] Database tables ready")
+        print("[OK] Database tables ready")
     except Exception as e:
         print(f"[ERROR] Failed to initialize database tables: {e}")
