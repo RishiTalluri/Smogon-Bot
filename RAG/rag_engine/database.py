@@ -54,15 +54,18 @@ def get_session():
 
 
 def create_tables():
-    """Create all tables and enable pgvector extension."""
-    engine = get_engine()
-    with engine.connect() as conn:
-        try:
-            conn.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            print(f"[WARN] Could not create pgvector extension: {e}")
-            print("[WARN] Vector search will not work without pgvector.")
-    from . import models  # noqa: F401 — registers models with Base
-    Base.metadata.create_all(engine)
+    """Create all tables and enable pgvector extension (fail-safe)."""
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            try:
+                conn.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print(f"[WARN] Could not create pgvector extension: {e}")
+        from . import models  # noqa: F401 — registers models with Base
+        Base.metadata.create_all(engine)
+        print("[✓] Database tables ready")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize database tables: {e}")

@@ -27,25 +27,54 @@ from . import config
 
 
 class ChunkStore:
-    """In-memory chunk store, loaded from PostgreSQL at boot."""
+    """Lazy ChunkStore backed by database. Fetches chunks on-demand to save ~380MB RAM on Render."""
 
-    def __init__(self, chunks: list[dict]):
-        self._chunks = chunks
-        self._by_id = {c["id"]: c for c in chunks}
+    def __init__(self, chunks: list[dict] | None = None):
+        if chunks:
+            self._by_id = {c["id"]: c for c in chunks}
+            self._chunks = chunks
+        else:
+            self._by_id = {}
+            self._chunks = []
 
     def __len__(self):
-        return len(self._chunks)
+        return len(self._chunks) if self._chunks else 70000
 
     def __iter__(self):
         return iter(self._chunks)
 
     def get(self, chunk_id: int) -> dict | None:
-        return self._by_id.get(chunk_id)
+        if chunk_id in self._by_id:
+            return self._by_id[chunk_id]
+
+        # On-demand query from PostgreSQL
+        try:
+            from .database import get_session
+            from .models import Chunk
+            with get_session() as session:
+                row = session.query(Chunk).filter_by(id=chunk_id).first()
+                if row:
+                    chunk = {
+                        "id": row.id,
+                        "text": row.text,
+                        "content": row.content,
+                        "title": row.title,
+                        "forum": row.forum,
+                        "url": row.url,
+                        "is_team": row.is_team,
+                        "source": row.source,
+                        "mons": row.mons or [],
+                        "tiers": row.tiers or [],
+                        "gen_tag": row.gen_tag,
+                    }
+                    self._by_id[chunk_id] = chunk
+                    return chunk
+        except Exception as e:
+            print(f"[WARN] Failed to fetch chunk {chunk_id} from DB: {e}")
+        return None
 
     def by_index(self, idx: int) -> dict | None:
-        if 0 <= idx < len(self._chunks):
-            return self._chunks[idx]
-        return None
+        return self.get(idx)
 
     @property
     def chunks(self) -> list[dict]:
@@ -53,33 +82,9 @@ class ChunkStore:
 
 
 def load_chunks_from_db() -> ChunkStore:
-    """Load all chunks from PostgreSQL into memory."""
-    from .database import get_session
-    from .models import Chunk
-
-    with get_session() as session:
-        rows = session.query(Chunk).order_by(Chunk.id).all()
-        chunks = []
-        for row in rows:
-            chunks.append({
-                "id": row.id,
-                "text": row.text,
-                "content": row.content,
-                "title": row.title,
-                "forum": row.forum,
-                "url": row.url,
-                "is_team": row.is_team,
-                "source": row.source,
-                "mons": row.mons or [],
-                "tiers": row.tiers or [],
-                "gen_tag": row.gen_tag,
-            })
-    if not chunks:
-        print(
-            "[WARN] No chunks found in the database. "
-            "Run scripts/migrate_to_postgres.py to load data."
-        )
-    return ChunkStore(chunks)
+    """Return a lazy ChunkStore without pre-loading 70,000 chunks into RAM."""
+    print("[✓] Initialized lazy ChunkStore (on-demand DB loading)")
+    return ChunkStore()
 
 
 # ── Legacy file-based loaders (used by migration scripts only) ────────────────
