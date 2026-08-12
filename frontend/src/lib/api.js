@@ -2,7 +2,8 @@
 // Every function here maps 1:1 to a real route — nothing is invented.
 // Base URL is configurable via VITE_API_BASE_URL (defaults to local dev server).
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const rawBase = import.meta.env.VITE_API_BASE_URL || "";
+const BASE_URL = rawBase.replace(/\/+$/, "");
 
 class ApiError extends Error {
   constructor(message, status) {

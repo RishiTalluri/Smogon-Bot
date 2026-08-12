@@ -16,6 +16,7 @@ from rag_engine.models import User, Chat, Message
 from rag_engine.auth import hash_password, verify_password, create_token, require_auth
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 # CORS: allow Vercel frontend (or any configured origins)
 allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
 CORS(app, origins=[o.strip() for o in allowed_origins.split(",")] if allowed_origins != "*" else "*")
