@@ -75,7 +75,11 @@ def handle_exception(e):
         return e
     import traceback
     traceback.print_exc()
-    return jsonify({"error": str(e)}), 500
+    resp = jsonify({"error": str(e)})
+    resp.headers.add("Access-Control-Allow-Origin", "*")
+    resp.headers.add("Access-Control-Allow-Headers", "*")
+    resp.headers.add("Access-Control-Allow-Methods", "*")
+    return resp, 500
 
 
 @app.route("/", methods=["GET", "HEAD"])
