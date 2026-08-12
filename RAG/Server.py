@@ -67,13 +67,20 @@ def build_rag_history(messages):
             i += 1
     return history
 
-# ── Public Routes ─────────────────────────────────────────────────────────────
+from werkzeug.exceptions import HTTPException
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
     import traceback
     traceback.print_exc()
     return jsonify({"error": str(e)}), 500
+
+
+@app.route("/", methods=["GET", "HEAD"])
+def index():
+    return jsonify({"message": "Smogon Bot API is running", "health": "/api/health"})
 
 
 @app.route("/api/health", methods=["GET"])
