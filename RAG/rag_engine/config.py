@@ -33,10 +33,10 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-DATABASE_URL = os.environ.get(
-    'DATABASE_URL',
-    'postgresql://neondb_owner:npg_NLM02ZYomeAh@ep-lingering-surf-ax37eoty-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
-)
+_raw_db = os.environ.get('DATABASE_URL', '')
+if not _raw_db or "ep-round-surf" in _raw_db or "localhost" in _raw_db:
+    _raw_db = 'postgresql://neondb_owner:npg_NLM02ZYomeAh@ep-lingering-surf-ax37eoty-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+DATABASE_URL = _raw_db
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'dev-secret-change-me')
 JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '24'))
 
