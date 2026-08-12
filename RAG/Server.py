@@ -17,9 +17,8 @@ from rag_engine.auth import hash_password, verify_password, create_token, requir
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
-# CORS: allow Vercel frontend (or any configured origins)
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-CORS(app, origins=[o.strip() for o in allowed_origins.split(",")] if allowed_origins != "*" else "*")
+# CORS: allow all origins, methods, and headers for Vercel frontend
+CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers="*", methods="*")
 
 # ── Boot DB (once at startup) ──────────────────────────────────────────────────
 print("[*] Creating database tables...")
