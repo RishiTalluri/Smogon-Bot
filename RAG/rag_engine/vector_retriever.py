@@ -34,16 +34,15 @@ class VectorRetriever:
                 q_client = QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY, timeout=10)
                 for emb in embeddings:
                     vec_list = [float(x) for x in emb]
-                    results = q_client.search(
-                        collection_name=config.QDRANT_COLLECTION,
-                        query_vector=vec_list,
-                        limit=top_k,
-                    )
-                    for res in results:
-                        cid = int(res.id)
-                        # Qdrant score is similarity score (1.0 = identical, 0 = different)
-                        # We convert similarity to distance metric (1 - score) for consistent normalize()
-                        dist = max(0.0, 1.0 - float(res.score))
+                    if hasattr(q_client, "query_points"):
+                        res = q_client.query_points(collection_name=config.QDRANT_COLLECTION, query=vec_list, limit=top_k)
+                        hits = res.points
+                    else:
+                        hits = q_client.search(collection_name=config.QDRANT_COLLECTION, query_vector=vec_list, limit=top_k)
+                    
+                    for hit in hits:
+                        cid = int(hit.id)
+                        dist = max(0.0, 1.0 - float(hit.score))
                         if cid not in all_distances or dist < all_distances[cid]:
                             all_distances[cid] = dist
                 return all_distances

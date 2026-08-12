@@ -21,7 +21,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rag_engine import config
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 250
+
+def upsert_with_retry(client, collection_name, points, retries=4):
+    for attempt in range(retries):
+        try:
+            client.upsert(collection_name=collection_name, points=points)
+            return
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            time.sleep(3)
 
 
 def load_chunks():
@@ -68,7 +78,7 @@ def main():
     from qdrant_client.models import Distance, VectorParams, PointStruct
 
     print(f"Connecting to Qdrant Cloud: {qdrant_url} ...")
-    client = QdrantClient(url=qdrant_url, api_key=qdrant_key, timeout=30)
+    client = QdrantClient(url=qdrant_url, api_key=qdrant_key, timeout=120)
 
     # Check if collection exists or recreate
     collections = [c.name for c in client.get_collections().collections]
@@ -109,7 +119,7 @@ def main():
                 )
             )
 
-        client.upsert(collection_name=collection_name, points=points)
+        upsert_with_retry(client, collection_name, points)
 
     elapsed = time.time() - start_time
     print(f"\n[OK] Uploaded {len(chunks)} chunks to Qdrant Cloud in {elapsed:.0f}s!")
