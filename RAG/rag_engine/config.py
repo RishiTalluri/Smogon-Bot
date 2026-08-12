@@ -37,6 +37,10 @@ DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://smogon:smogon@localh
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'dev-secret-change-me')
 JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '24'))
 
+QDRANT_URL = os.environ.get("QDRANT_URL", "")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
+QDRANT_COLLECTION = os.environ.get("QDRANT_COLLECTION", "smogon_chunks")
+
 # ─── RETRIEVAL TUNABLES ─────────────────────────────────────────────────────────
 TOP_K              = 50      # FAISS candidates per query variant
 FINAL_TOP_K        = 10      # chunks sent to the LLM after hybrid reranking
