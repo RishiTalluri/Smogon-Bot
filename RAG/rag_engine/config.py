@@ -31,7 +31,7 @@ LEGACY_CHUNKS_PKL_PATH = os.path.join(DATA_DIR, "docs.pkl")
 EMBED_MODEL = "all-MiniLM-L6-v2"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-specdec")
 
 _raw_db = os.environ.get('DATABASE_URL', '')
 if not _raw_db or "ep-round-surf" in _raw_db or "localhost" in _raw_db:
