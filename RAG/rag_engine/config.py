@@ -33,21 +33,12 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-specdec")
 
-_raw_db = os.environ.get('DATABASE_URL', '')
-if not _raw_db or "ep-round-surf" in _raw_db or "localhost" in _raw_db:
-    _raw_db = 'postgresql://neondb_owner:npg_NLM02ZYomeAh@ep-lingering-surf-ax37eoty-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
-DATABASE_URL = _raw_db
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'dev-secret-change-me')
 JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '24'))
 
-QDRANT_URL = os.environ.get(
-    "QDRANT_URL",
-    "https://eab1d80f-733b-4cee-9938-5ada96bd21c7.eu-central-1-0.aws.cloud.qdrant.io"
-)
-QDRANT_API_KEY = os.environ.get(
-    "QDRANT_API_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6NTg5YTQwZTktMzk0NC00MGQ5LTlkYmEtOGZjZDQ3YjQ4MmFlIn0._4CmTx00g7T7-tng6F9phatkQp2sdNbSuWWZHgnlA7s"
-)
+QDRANT_URL = os.environ.get("QDRANT_URL", "")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
 QDRANT_COLLECTION = os.environ.get("QDRANT_COLLECTION", "smogon_chunks")
 
 # ─── RETRIEVAL TUNABLES ─────────────────────────────────────────────────────────
