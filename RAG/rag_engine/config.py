@@ -10,15 +10,19 @@ without importing from each other.
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # ─── PATHS ─────────────────────────────────────────────────────────────────────
 # Resolved relative to this file so it works regardless of the current working
 # directory the process was launched from (Bot.py used hardcoded ..\ paths that
 # only worked when run from inside RAG/).
 _THIS_DIR   = os.path.dirname(os.path.abspath(__file__))
 RAG_DIR     = os.path.dirname(_THIS_DIR)                 # .../RAG
+ROOT_DIR    = os.path.dirname(RAG_DIR)
 DATA_DIR    = os.path.join(RAG_DIR, "RAG_Data")
+
+# Load .env files in priority order (gitignored)
+load_dotenv(os.path.join(ROOT_DIR, ".env"))
+load_dotenv(os.path.join(ROOT_DIR, "Token&Paths", ".env"))
+load_dotenv()
 
 FAISS_INDEX_PATH = os.path.join(DATA_DIR, "faiss_index.bin")
 CHUNKS_PATH       = os.path.join(DATA_DIR, "chunks.jsonl")   # replaces docs.pkl
